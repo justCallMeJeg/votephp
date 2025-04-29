@@ -91,13 +91,13 @@ $polls = $votingSystem->getPollsForUser($_SESSION['user_id']);
                                         <div class="accordion-body">
                                             <p><?= htmlspecialchars($poll->getDescription()) ?></p>
                                             
-                                            <?php if (!$poll->requiresVote() && ($poll->allowsMultipleVotes() || !$poll->hasUserVoted($_SESSION['user_id']))): ?>
+                                            <?php if (!$poll->isClosed() && ($poll->allowsMultipleVotes() || !$poll->hasUserVoted($_SESSION['user_id']))): ?>
                                                 <form method="post" action="" id="voteForm<?= $index ?>">
                                                     <input type="hidden" name="poll_id" value="<?= $poll->getId() ?>">
                                                     
                                                     <?php if (!$poll->requiresVote()): ?>
-                                                        <div class="alert alert-info mb-3">
-                                                            <strong>Note:</strong> Voting on this poll is optional. You can <a href="#results<?= $index ?>" class="alert-link">view the results</a> without voting.
+                                                        <div class="alert alert-success mb-3">
+                                                            <strong>Note:</strong> Voting on this poll is optional. You can view the results without voting.
                                                         </div>
                                                     <?php endif; ?>
                                                     
@@ -133,7 +133,7 @@ $polls = $votingSystem->getPollsForUser($_SESSION['user_id']);
                                                     <button type="submit" name="vote" class="btn btn-primary mt-2">Vote</button>
                                                     
                                                     <?php if (!$poll->requiresVote() && $poll->shouldShowResultsToUser($_SESSION['user_id'])): ?>
-                                                        <a href="#results<?= $index ?>" class="btn btn-outline-primary mt-2 ms-2">View Results Without Voting</a>
+                                                        <a href="#results<?= $index ?>" class="btn btn-outline-secondary mt-2 ms-2">View Results</a>
                                                     <?php endif; ?>
                                                 </form>
                                             <?php elseif (!$poll->allowsMultipleVotes() && $poll->hasUserVoted($_SESSION['user_id'])): ?>

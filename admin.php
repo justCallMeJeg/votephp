@@ -346,7 +346,6 @@ $users = $votingSystem->getUsers();
                         <div class="mb-3 form-check">
                             <input type="checkbox" class="form-check-input" id="requires_vote" name="requires_vote" checked>
                             <label class="form-check-label" for="requires_vote">Require voting (uncheck to make voting optional)</label>
-                            <div class="form-text">When unchecked, users can view poll results without voting. This is useful for informational polls or announcements.</div>
                         </div>
                         
                         <div class="accordion" id="advancedSettingsAccordion">
@@ -439,9 +438,8 @@ $users = $votingSystem->getUsers();
                         </div>
                         
                         <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="edit_requires_vote" name="requires_vote">
+                            <input type="checkbox" class="form-check-input" id="edit_requires_vote" name="requires_vote" checked>
                             <label class="form-check-label" for="edit_requires_vote">Require voting (uncheck to make voting optional)</label>
-                            <div class="form-text">When unchecked, users can view poll results without voting. This is useful for informational polls or announcements.</div>
                         </div>
                         
                         <div class="accordion" id="editAdvancedSettingsAccordion">
