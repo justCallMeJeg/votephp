@@ -16,6 +16,10 @@ abstract class Poll {
     protected $votedUsers;
     protected $requiresVote;
     protected $pollType;
+    protected $status; // 'draft', 'active', 'ended'
+    protected $startDate;
+    protected $actualEndDate;
+    protected $hideAfterEnd; // Whether to hide poll from voters after it ends
     
     /**
      * Constructor
@@ -32,7 +36,11 @@ abstract class Poll {
         $endDate = null,
         $votedUsers = [],
         $requiresVote = true,
-        $pollType = 'basic'
+        $pollType = 'basic',
+        $status = 'draft',
+        $startDate = null,
+        $actualEndDate = null,
+        $hideAfterEnd = false
     ) {
         $this->id = $id;
         $this->title = $title;
@@ -46,6 +54,10 @@ abstract class Poll {
         $this->votedUsers = $votedUsers;
         $this->requiresVote = $requiresVote;
         $this->pollType = $pollType;
+        $this->status = $status;
+        $this->startDate = $startDate;
+        $this->actualEndDate = $actualEndDate;
+        $this->hideAfterEnd = $hideAfterEnd;
     }
     
     // Getters
@@ -61,6 +73,81 @@ abstract class Poll {
     public function getVotedUsers() { return $this->votedUsers; }
     public function requiresVote() { return $this->requiresVote; }
     public function getPollType() { return $this->pollType; }
+    public function getStatus() { return $this->status; }
+    public function getStartDate() { return $this->startDate; }
+    public function getActualEndDate() { return $this->actualEndDate; }
+    public function getHideAfterEnd() { return $this->hideAfterEnd; }
+    
+    /**
+     * Set poll status
+     */
+    public function setStatus($status) {
+        $this->status = $status;
+    }
+    
+    /**
+     * Set start date
+     */
+    public function setStartDate($startDate) {
+        $this->startDate = $startDate;
+    }
+    
+    /**
+     * Set actual end date
+     */
+    public function setActualEndDate($actualEndDate) {
+        $this->actualEndDate = $actualEndDate;
+    }
+    
+    /**
+     * Check if poll is in draft status
+     */
+    public function isDraft() {
+        return $this->status === 'draft';
+    }
+    
+    /**
+     * Check if poll is active
+     */
+    public function isActive() {
+        return $this->status === 'active';
+    }
+    
+    /**
+     * Check if poll is ended
+     */
+    public function isEnded() {
+        return $this->status === 'ended';
+    }
+    
+    /**
+     * Check if poll can be edited
+     */
+    public function canBeEdited() {
+        return $this->status === 'draft';
+    }
+    
+    /**
+     * Check if poll can be voted on
+     */
+    public function canBeVotedOn() {
+        return $this->status === 'active';
+    }
+    
+    /**
+     * Check if poll should be visible to voters
+     */
+    public function isVisibleToVoters() {
+        if ($this->status === 'draft') {
+            return false;
+        }
+        
+        if ($this->status === 'ended' && $this->hideAfterEnd) {
+            return false;
+        }
+        
+        return true;
+    }
     
     /**
      * Get total votes for this poll
@@ -74,7 +161,7 @@ abstract class Poll {
     }
     
     /**
-     * Check if poll is closed
+     * Check if poll is closed (by scheduled end date)
      */
     public function isClosed() {
         if ($this->endDate === null) {
@@ -117,7 +204,7 @@ abstract class Poll {
             case 'after_vote':
                 return $this->hasUserVoted($userId);
             case 'after_close':
-                return $this->isClosed();
+                return $this->isClosed() || $this->isEnded();
             case 'always':
             default:
                 return true;
@@ -136,6 +223,38 @@ abstract class Poll {
         return null;
     }
     
+    /**
+     * Get status badge class
+     */
+    public function getStatusBadgeClass() {
+        switch ($this->status) {
+            case 'draft':
+                return 'bg-secondary';
+            case 'active':
+                return 'bg-success';
+            case 'ended':
+                return 'bg-danger';
+            default:
+                return 'bg-secondary';
+        }
+    }
+    
+    /**
+     * Get status display name
+     */
+    public function getStatusDisplayName() {
+        switch ($this->status) {
+            case 'draft':
+                return 'Draft';
+            case 'active':
+                return 'Active';
+            case 'ended':
+                return 'Ended';
+            default:
+                return 'Unknown';
+        }
+    }
+    
     // Abstract methods that must be implemented by subclasses
     abstract public function getMaxSelectableOptions();
     abstract public function allowsMultipleSelections();
@@ -150,12 +269,14 @@ class SingleChoicePoll extends Poll {
     public function __construct(
         $id, $title, $description, $options, $allowMultipleVotes = true, 
         $showResultsMode = 'always', $isRestricted = false, $allowedUsers = [], 
-        $endDate = null, $votedUsers = [], $requiresVote = true
+        $endDate = null, $votedUsers = [], $requiresVote = true, $status = 'draft',
+        $startDate = null, $actualEndDate = null, $hideAfterEnd = false
     ) {
         parent::__construct(
             $id, $title, $description, $options, $allowMultipleVotes, 
             $showResultsMode, $isRestricted, $allowedUsers, $endDate, 
-            $votedUsers, $requiresVote, 'single_choice'
+            $votedUsers, $requiresVote, 'single_choice', $status,
+            $startDate, $actualEndDate, $hideAfterEnd
         );
     }
     
@@ -189,12 +310,14 @@ class MultipleChoicePoll extends Poll {
         $id, $title, $description, $options, $maxSelectableOptions = 2,
         $allowMultipleVotes = true, $showResultsMode = 'always', 
         $isRestricted = false, $allowedUsers = [], $endDate = null, 
-        $votedUsers = [], $requiresVote = true
+        $votedUsers = [], $requiresVote = true, $status = 'draft',
+        $startDate = null, $actualEndDate = null, $hideAfterEnd = false
     ) {
         parent::__construct(
             $id, $title, $description, $options, $allowMultipleVotes, 
             $showResultsMode, $isRestricted, $allowedUsers, $endDate, 
-            $votedUsers, $requiresVote, 'multiple_choice'
+            $votedUsers, $requiresVote, 'multiple_choice', $status,
+            $startDate, $actualEndDate, $hideAfterEnd
         );
         $this->maxSelectableOptions = max(2, min(count($options), intval($maxSelectableOptions)));
     }
@@ -226,7 +349,8 @@ class YesNoPoll extends Poll {
     public function __construct(
         $id, $title, $description, $allowMultipleVotes = true, 
         $showResultsMode = 'always', $isRestricted = false, $allowedUsers = [], 
-        $endDate = null, $votedUsers = [], $requiresVote = true
+        $endDate = null, $votedUsers = [], $requiresVote = true, $status = 'draft',
+        $startDate = null, $actualEndDate = null, $hideAfterEnd = false
     ) {
         $options = [
             new Option('yes_' . $id, 'Yes', 0),
@@ -236,7 +360,8 @@ class YesNoPoll extends Poll {
         parent::__construct(
             $id, $title, $description, $options, $allowMultipleVotes, 
             $showResultsMode, $isRestricted, $allowedUsers, $endDate, 
-            $votedUsers, $requiresVote, 'yes_no'
+            $votedUsers, $requiresVote, 'yes_no', $status,
+            $startDate, $actualEndDate, $hideAfterEnd
         );
     }
     

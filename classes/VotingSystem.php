@@ -103,7 +103,11 @@ class VotingSystem {
                             $pollData['allowed_users'] ?? [],
                             $pollData['end_date'] ?? null,
                             $pollData['voted_users'] ?? [],
-                            $pollData['requires_vote'] ?? true
+                            $pollData['requires_vote'] ?? true,
+                            $pollData['status'] ?? 'draft',
+                            $pollData['start_date'] ?? null,
+                            $pollData['actual_end_date'] ?? null,
+                            $pollData['hide_after_end'] ?? false
                         );
                         break;
                     case 'yes_no':
@@ -117,7 +121,11 @@ class VotingSystem {
                             $pollData['allowed_users'] ?? [],
                             $pollData['end_date'] ?? null,
                             $pollData['voted_users'] ?? [],
-                            $pollData['requires_vote'] ?? true
+                            $pollData['requires_vote'] ?? true,
+                            $pollData['status'] ?? 'draft',
+                            $pollData['start_date'] ?? null,
+                            $pollData['actual_end_date'] ?? null,
+                            $pollData['hide_after_end'] ?? false
                         );
                         break;
                     default: // single_choice
@@ -132,7 +140,11 @@ class VotingSystem {
                             $pollData['allowed_users'] ?? [],
                             $pollData['end_date'] ?? null,
                             $pollData['voted_users'] ?? [],
-                            $pollData['requires_vote'] ?? true
+                            $pollData['requires_vote'] ?? true,
+                            $pollData['status'] ?? 'draft',
+                            $pollData['start_date'] ?? null,
+                            $pollData['actual_end_date'] ?? null,
+                            $pollData['hide_after_end'] ?? false
                         );
                         break;
                 }
@@ -161,7 +173,7 @@ class VotingSystem {
                 $logData['user_id'],
                 $logData['username'],
                 $logData['details'],
-                $logData['ip_address']
+                $logData['ip_address'] ?? ''
             );
         }
     }
@@ -194,7 +206,11 @@ class VotingSystem {
                 'end_date' => $poll->getEndDate(),
                 'voted_users' => $poll->getVotedUsers(),
                 'requires_vote' => $poll->requiresVote(),
-                'poll_type' => $poll->getPollType()
+                'poll_type' => $poll->getPollType(),
+                'status' => $poll->getStatus(),
+                'start_date' => $poll->getStartDate(),
+                'actual_end_date' => $poll->getActualEndDate(),
+                'hide_after_end' => $poll->getHideAfterEnd()
             ];
             
             // Add max_selectable_options for multiple choice polls
@@ -236,10 +252,133 @@ class VotingSystem {
     }
     
     /**
-     * Get audit logs
+     * Get audit logs with pagination
      */
-    public function getAuditLogs($limit = 100) {
-        return array_slice(array_reverse($this->auditLogs), 0, $limit);
+    public function getAuditLogs($page = 1, $perPage = 20) {
+        $totalLogs = count($this->auditLogs);
+        $totalPages = ceil($totalLogs / $perPage);
+        $offset = ($page - 1) * $perPage;
+        
+        $reversedLogs = array_reverse($this->auditLogs);
+        $paginatedLogs = array_slice($reversedLogs, $offset, $perPage);
+        
+        return [
+            'logs' => $paginatedLogs,
+            'currentPage' => $page,
+            'totalPages' => $totalPages,
+            'totalLogs' => $totalLogs,
+            'perPage' => $perPage
+        ];
+    }
+    
+    /**
+     * Start a poll
+     */
+    public function startPoll($pollId, $userId = null, $username = null) {
+        foreach ($this->polls as $poll) {
+            if ($poll->getId() === $pollId && $poll->isDraft()) {
+                $poll->setStatus('active');
+                $poll->setStartDate(date('Y-m-d H:i:s'));
+                $this->savePolls();
+                
+                // Add audit log
+                if ($userId && $username) {
+                    $this->addAuditLog(
+                        'poll_started', 
+                        $userId, 
+                        $username, 
+                        "Started poll: {$poll->getTitle()}"
+                    );
+                }
+                
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * End a poll
+     */
+    public function endPoll($pollId, $hideAfterEnd = false, $userId = null, $username = null) {
+        foreach ($this->polls as $poll) {
+            if ($poll->getId() === $pollId && $poll->isActive()) {
+                $poll->setStatus('ended');
+                $poll->setActualEndDate(date('Y-m-d H:i:s'));
+                
+                // Update poll with new hide_after_end setting
+                $this->updatePollHideAfterEnd($pollId, $hideAfterEnd);
+                
+                $this->savePolls();
+                
+                // Add audit log
+                if ($userId && $username) {
+                    $hideText = $hideAfterEnd ? ' (hidden from voters)' : ' (visible to voters)';
+                    $this->addAuditLog(
+                        'poll_ended', 
+                        $userId, 
+                        $username, 
+                        "Ended poll: {$poll->getTitle()}{$hideText}"
+                    );
+                }
+                
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Update poll hide after end setting
+     */
+    private function updatePollHideAfterEnd($pollId, $hideAfterEnd) {
+        foreach ($this->polls as $key => $poll) {
+            if ($poll->getId() === $pollId) {
+                // Create a new poll object with updated hide_after_end setting
+                $pollType = $poll->getPollType();
+                $options = $poll->getOptions();
+                
+                switch ($pollType) {
+                    case 'multiple_choice':
+                        $updatedPoll = new MultipleChoicePoll(
+                            $poll->getId(), $poll->getTitle(), $poll->getDescription(), 
+                            $options, $poll->getMaxSelectableOptions(),
+                            $poll->allowsMultipleVotes(), $poll->getShowResultsMode(),
+                            $poll->isRestricted(), $poll->getAllowedUsers(),
+                            $poll->getEndDate(), $poll->getVotedUsers(),
+                            $poll->requiresVote(), $poll->getStatus(),
+                            $poll->getStartDate(), $poll->getActualEndDate(), $hideAfterEnd
+                        );
+                        break;
+                    case 'yes_no':
+                        $updatedPoll = new YesNoPoll(
+                            $poll->getId(), $poll->getTitle(), $poll->getDescription(),
+                            $poll->allowsMultipleVotes(), $poll->getShowResultsMode(),
+                            $poll->isRestricted(), $poll->getAllowedUsers(),
+                            $poll->getEndDate(), $poll->getVotedUsers(),
+                            $poll->requiresVote(), $poll->getStatus(),
+                            $poll->getStartDate(), $poll->getActualEndDate(), $hideAfterEnd
+                        );
+                        break;
+                    default: // single_choice
+                        $updatedPoll = new SingleChoicePoll(
+                            $poll->getId(), $poll->getTitle(), $poll->getDescription(),
+                            $options, $poll->allowsMultipleVotes(),
+                            $poll->getShowResultsMode(), $poll->isRestricted(),
+                            $poll->getAllowedUsers(), $poll->getEndDate(),
+                            $poll->getVotedUsers(), $poll->requiresVote(),
+                            $poll->getStatus(), $poll->getStartDate(),
+                            $poll->getActualEndDate(), $hideAfterEnd
+                        );
+                        break;
+                }
+                
+                $this->polls[$key] = $updatedPoll;
+                break;
+            }
+        }
     }
     
     /**
@@ -250,13 +389,13 @@ class VotingSystem {
     }
     
     /**
-     * Get polls accessible to a specific user
+     * Get polls accessible to a specific user (only visible polls)
      */
     public function getPollsForUser($userId) {
         $accessiblePolls = [];
         
         foreach ($this->polls as $poll) {
-            if (!$poll->isRestricted() || $poll->isUserAllowed($userId)) {
+            if ($poll->isVisibleToVoters() && (!$poll->isRestricted() || $poll->isUserAllowed($userId))) {
                 $accessiblePolls[] = $poll;
             }
         }
@@ -293,7 +432,7 @@ class VotingSystem {
                 $poll = new MultipleChoicePoll(
                     $pollId, $title, $description, $options, $maxSelectableOptions,
                     $allowMultipleVotes, $showResultsMode, $isRestricted, 
-                    $allowedUsers, $endDate, [], $requiresVote
+                    $allowedUsers, $endDate, [], $requiresVote, 'draft'
                 );
                 break;
                 
@@ -301,7 +440,7 @@ class VotingSystem {
                 $poll = new YesNoPoll(
                     $pollId, $title, $description, $allowMultipleVotes, 
                     $showResultsMode, $isRestricted, $allowedUsers, 
-                    $endDate, [], $requiresVote
+                    $endDate, [], $requiresVote, 'draft'
                 );
                 break;
                 
@@ -314,7 +453,7 @@ class VotingSystem {
                 $poll = new SingleChoicePoll(
                     $pollId, $title, $description, $options, $allowMultipleVotes, 
                     $showResultsMode, $isRestricted, $allowedUsers, 
-                    $endDate, [], $requiresVote
+                    $endDate, [], $requiresVote, 'draft'
                 );
                 break;
         }
@@ -336,7 +475,7 @@ class VotingSystem {
     }
     
     /**
-     * Update an existing poll
+     * Update an existing poll (only if in draft status)
      */
     public function updatePoll(
         $pollId, $title, $description, $allowMultipleVotes = true, 
@@ -345,7 +484,7 @@ class VotingSystem {
         $requiresVote = true, $userId = null, $username = null
     ) {
         foreach ($this->polls as $key => $poll) {
-            if ($poll->getId() === $pollId) {
+            if ($poll->getId() === $pollId && $poll->canBeEdited()) {
                 $options = $poll->getOptions();
                 $pollType = $poll->getPollType();
                 
@@ -356,21 +495,27 @@ class VotingSystem {
                         $updatedPoll = new MultipleChoicePoll(
                             $pollId, $title, $description, $options, $maxSelectableOptions,
                             $allowMultipleVotes, $showResultsMode, $isRestricted,
-                            $allowedUsers, $endDate, $poll->getVotedUsers(), $requiresVote
+                            $allowedUsers, $endDate, $poll->getVotedUsers(), $requiresVote,
+                            $poll->getStatus(), $poll->getStartDate(), $poll->getActualEndDate(),
+                            $poll->getHideAfterEnd()
                         );
                         break;
                     case 'yes_no':
                         $updatedPoll = new YesNoPoll(
                             $pollId, $title, $description, $allowMultipleVotes,
                             $showResultsMode, $isRestricted, $allowedUsers,
-                            $endDate, $poll->getVotedUsers(), $requiresVote
+                            $endDate, $poll->getVotedUsers(), $requiresVote,
+                            $poll->getStatus(), $poll->getStartDate(), $poll->getActualEndDate(),
+                            $poll->getHideAfterEnd()
                         );
                         break;
                     default: // single_choice
                         $updatedPoll = new SingleChoicePoll(
                             $pollId, $title, $description, $options, $allowMultipleVotes,
                             $showResultsMode, $isRestricted, $allowedUsers,
-                            $endDate, $poll->getVotedUsers(), $requiresVote
+                            $endDate, $poll->getVotedUsers(), $requiresVote,
+                            $poll->getStatus(), $poll->getStartDate(), $poll->getActualEndDate(),
+                            $poll->getHideAfterEnd()
                         );
                         break;
                 }
@@ -428,7 +573,12 @@ class VotingSystem {
     public function vote($pollId, $optionIds, $userId) {
         foreach ($this->polls as $poll) {
             if ($poll->getId() === $pollId) {
-                // Check if poll is closed
+                // Check if poll can be voted on
+                if (!$poll->canBeVotedOn()) {
+                    return false;
+                }
+                
+                // Check if poll is closed by scheduled end date
                 if ($poll->isClosed()) {
                     return false;
                 }

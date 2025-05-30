@@ -64,12 +64,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $maxSelectableOptions = isset($_POST['max_selectable_options']) ? intval($_POST['max_selectable_options']) : 2;
         $requiresVote = isset($_POST['requires_vote']);
         
-        $votingSystem->updatePoll(
+        $result = $votingSystem->updatePoll(
             $pollId, $title, $description, $allowMultipleVotes, 
             $showResultsMode, $isRestricted, $allowedUsers, 
             $endDate, $maxSelectableOptions, $requiresVote,
             $_SESSION['user_id'], $_SESSION['username']
         );
+        
+        if (!$result) {
+            $error = "Poll cannot be edited once it has been started";
+        }
+    }
+    
+    // Handle poll start
+    if (isset($_POST['start_poll'])) {
+        $pollId = $_POST['poll_id'];
+        $votingSystem->startPoll($pollId, $_SESSION['user_id'], $_SESSION['username']);
+    }
+    
+    // Handle poll end
+    if (isset($_POST['end_poll'])) {
+        $pollId = $_POST['poll_id'];
+        $hideAfterEnd = isset($_POST['hide_after_end']);
+        $votingSystem->endPoll($pollId, $hideAfterEnd, $_SESSION['user_id'], $_SESSION['username']);
     }
     
     // Handle user creation
@@ -131,8 +148,9 @@ $polls = $votingSystem->getPolls();
 // Get all users
 $users = $votingSystem->getUsers();
 
-// Get recent audit logs
-$auditLogs = $votingSystem->getAuditLogs(50);
+// Get audit logs with pagination
+$currentPage = isset($_GET['audit_page']) ? max(1, intval($_GET['audit_page'])) : 1;
+$auditData = $votingSystem->getAuditLogs($currentPage, 15);
 ?>
 
 <!DOCTYPE html>
@@ -226,7 +244,7 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                 <div class="stats-card">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h3 class="mb-0"><?= count(array_filter($polls, function($poll) { return !$poll->isClosed(); })) ?></h3>
+                            <h3 class="mb-0"><?= count(array_filter($polls, function($poll) { return $poll->isActive(); })) ?></h3>
                             <p class="mb-0">Active Polls</p>
                         </div>
                         <i class="bi bi-play-circle-fill fs-1 opacity-75"></i>
@@ -254,6 +272,7 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                                         <tr>
                                             <th><i class="bi bi-card-text"></i> Title</th>
                                             <th><i class="bi bi-type"></i> Type</th>
+                                            <th><i class="bi bi-activity"></i> Status</th>
                                             <th><i class="bi bi-list-ol"></i> Options</th>
                                             <th><i class="bi bi-check-square"></i> Votes</th>
                                             <th><i class="bi bi-gear"></i> Settings</th>
@@ -273,6 +292,18 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                                                         <i class="bi bi-<?= $poll->getPollType() === 'yes_no' ? 'toggle-on' : ($poll->allowsMultipleSelections() ? 'check2-all' : 'check2') ?>"></i>
                                                         <?= $poll->getDisplayName() ?>
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge <?= $poll->getStatusBadgeClass() ?>">
+                                                        <i class="bi bi-<?= $poll->isDraft() ? 'file-earmark' : ($poll->isActive() ? 'play-circle' : 'stop-circle') ?>"></i>
+                                                        <?= $poll->getStatusDisplayName() ?>
+                                                    </span>
+                                                    <?php if ($poll->getStartDate()): ?>
+                                                        <br><small class="text-muted">Started: <?= date('M j, Y g:i A', strtotime($poll->getStartDate())) ?></small>
+                                                    <?php endif; ?>
+                                                    <?php if ($poll->getActualEndDate()): ?>
+                                                        <br><small class="text-muted">Ended: <?= date('M j, Y g:i A', strtotime($poll->getActualEndDate())) ?></small>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td><?= count($poll->getOptions()) ?></td>
                                                 <td>
@@ -294,29 +325,47 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                                                             <span class="badge bg-warning">Restricted</span>
                                                         <?php endif; ?>
                                                         
-                                                        <?php if ($poll->isClosed()): ?>
-                                                            <span class="badge bg-secondary">Closed</span>
+                                                        <?php if ($poll->isEnded() && $poll->getHideAfterEnd()): ?>
+                                                            <span class="badge bg-secondary">Hidden</span>
                                                         <?php endif; ?>
                                                     </div>
                                                 </td>
                                                 <td>
                                                     <div class="btn-group" role="group">
-                                                        <button type="button" class="btn btn-sm btn-primary" 
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#editPollModal" 
-                                                                data-poll-id="<?= $poll->getId() ?>"
-                                                                data-poll-title="<?= htmlspecialchars($poll->getTitle()) ?>"
-                                                                data-poll-description="<?= htmlspecialchars($poll->getDescription()) ?>"
-                                                                data-poll-multiple-votes="<?= $poll->allowsMultipleVotes() ? '1' : '0' ?>"
-                                                                data-poll-results-mode="<?= $poll->getShowResultsMode() ?>"
-                                                                data-poll-restricted="<?= $poll->isRestricted() ? '1' : '0' ?>"
-                                                                data-poll-end-date="<?= $poll->getEndDate() ? date('Y-m-d', strtotime($poll->getEndDate())) : '' ?>"
-                                                                data-poll-end-time="<?= $poll->getEndDate() ? date('H:i', strtotime($poll->getEndDate())) : '' ?>"
-                                                                data-poll-allowed-users="<?= htmlspecialchars(json_encode($poll->getAllowedUsers())) ?>"
-                                                                data-poll-max-selectable-options="<?= $poll->getMaxSelectableOptions() ?>"
-                                                                data-poll-requires-vote="<?= $poll->requiresVote() ? '1' : '0' ?>">
-                                                            <i class="bi bi-pencil"></i>
-                                                        </button>
+                                                        <?php if ($poll->isDraft()): ?>
+                                                            <button type="button" class="btn btn-sm btn-success" 
+                                                                    data-bs-toggle="modal" 
+                                                                    data-bs-target="#startPollModal"
+                                                                    data-poll-id="<?= $poll->getId() ?>"
+                                                                    data-poll-title="<?= htmlspecialchars($poll->getTitle()) ?>">
+                                                                <i class="bi bi-play-circle"></i>
+                                                            </button>
+                                                            <button type="button" class="btn btn-sm btn-primary" 
+                                                                    data-bs-toggle="modal" 
+                                                                    data-bs-target="#editPollModal" 
+                                                                    data-poll-id="<?= $poll->getId() ?>"
+                                                                    data-poll-title="<?= htmlspecialchars($poll->getTitle()) ?>"
+                                                                    data-poll-description="<?= htmlspecialchars($poll->getDescription()) ?>"
+                                                                    data-poll-multiple-votes="<?= $poll->allowsMultipleVotes() ? '1' : '0' ?>"
+                                                                    data-poll-results-mode="<?= $poll->getShowResultsMode() ?>"
+                                                                    data-poll-restricted="<?= $poll->isRestricted() ? '1' : '0' ?>"
+                                                                    data-poll-end-date="<?= $poll->getEndDate() ? date('Y-m-d', strtotime($poll->getEndDate())) : '' ?>"
+                                                                    data-poll-end-time="<?= $poll->getEndDate() ? date('H:i', strtotime($poll->getEndDate())) : '' ?>"
+                                                                    data-poll-allowed-users="<?= htmlspecialchars(json_encode($poll->getAllowedUsers())) ?>"
+                                                                    data-poll-max-selectable-options="<?= $poll->getMaxSelectableOptions() ?>"
+                                                                    data-poll-requires-vote="<?= $poll->requiresVote() ? '1' : '0' ?>">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                        <?php elseif ($poll->isActive()): ?>
+                                                            <button type="button" class="btn btn-sm btn-danger" 
+                                                                    data-bs-toggle="modal" 
+                                                                    data-bs-target="#endPollModal"
+                                                                    data-poll-id="<?= $poll->getId() ?>"
+                                                                    data-poll-title="<?= htmlspecialchars($poll->getTitle()) ?>">
+                                                                <i class="bi bi-stop-circle"></i>
+                                                            </button>
+                                                        <?php endif; ?>
+                                                        
                                                         <form method="post" action="" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this poll?');">
                                                             <input type="hidden" name="poll_id" value="<?= $poll->getId() ?>">
                                                             <button type="submit" name="delete_poll" class="btn btn-sm btn-danger">
@@ -402,6 +451,78 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                             </div>
                         <?php endif; ?>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Poll Modal -->
+    <div class="modal fade" id="startPollModal" tabindex="-1" aria-labelledby="startPollModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="startPollModalLabel">
+                        <i class="bi bi-play-circle"></i> Start Poll
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Warning:</strong> Once you start this poll, it cannot be edited anymore. Voters will be able to cast their votes.
+                    </div>
+                    <p>Are you sure you want to start the poll "<span id="startPollTitle"></span>"?</p>
+                    <form method="post" action="" id="startPollForm">
+                        <input type="hidden" id="start_poll_id" name="poll_id">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                    <button type="submit" form="startPollForm" name="start_poll" class="btn btn-success">
+                        <i class="bi bi-play-circle"></i> Start Poll
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- End Poll Modal -->
+    <div class="modal fade" id="endPollModal" tabindex="-1" aria-labelledby="endPollModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="endPollModalLabel">
+                        <i class="bi bi-stop-circle"></i> End Poll
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Warning:</strong> Once you end this poll, voters will no longer be able to vote on it.
+                    </div>
+                    <p>Are you sure you want to end the poll "<span id="endPollTitle"></span>"?</p>
+                    
+                    <form method="post" action="" id="endPollForm">
+                        <input type="hidden" id="end_poll_id" name="poll_id">
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="hide_after_end" name="hide_after_end">
+                            <label class="form-check-label" for="hide_after_end">
+                                <i class="bi bi-eye-slash"></i> Hide poll from voters after ending
+                            </label>
+                            <div class="form-text">If checked, voters will no longer see this poll once it's ended</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                    <button type="submit" form="endPollForm" name="end_poll" class="btn btn-danger">
+                        <i class="bi bi-stop-circle"></i> End Poll
+                    </button>
                 </div>
             </div>
         </div>
@@ -555,6 +676,10 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Note:</strong> Polls can only be edited while in draft status.
+                    </div>
                     <form method="post" action="" id="editPollForm">
                         <input type="hidden" id="edit_poll_id" name="poll_id">
                         <div class="mb-3">
@@ -771,6 +896,17 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="text-muted">
+                                Showing <?= count($auditData['logs']) ?> of <?= $auditData['totalLogs'] ?> entries
+                            </span>
+                        </div>
+                        <div>
+                            <span class="text-muted">Page <?= $auditData['currentPage'] ?> of <?= $auditData['totalPages'] ?></span>
+                        </div>
+                    </div>
+                    
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead>
@@ -779,35 +915,74 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                                     <th><i class="bi bi-activity"></i> Action</th>
                                     <th><i class="bi bi-person"></i> User</th>
                                     <th><i class="bi bi-info-circle"></i> Details</th>
-                                    <th><i class="bi bi-globe"></i> IP Address</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($auditLogs as $log): ?>
+                                <?php if (empty($auditData['logs'])): ?>
                                     <tr>
-                                        <td>
-                                            <small class="audit-timestamp">
-                                                <?= date('M j, Y g:i A', strtotime($log->getTimestamp())) ?>
-                                            </small>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-<?= 
-                                                strpos($log->getAction(), 'login') !== false ? 'success' :
-                                                (strpos($log->getAction(), 'created') !== false ? 'primary' :
-                                                (strpos($log->getAction(), 'deleted') !== false ? 'danger' :
-                                                (strpos($log->getAction(), 'updated') !== false ? 'warning' : 'info')))
-                                            ?>">
-                                                <?= ucwords(str_replace('_', ' ', $log->getAction())) ?>
-                                            </span>
-                                        </td>
-                                        <td><?= htmlspecialchars($log->getUsername()) ?></td>
-                                        <td><?= htmlspecialchars($log->getDetails()) ?></td>
-                                        <td><small class="text-muted font-monospace"><?= $log->getIpAddress() ?></small></td>
+                                        <td colspan="4" class="text-center text-muted">No audit logs available</td>
                                     </tr>
-                                <?php endforeach; ?>
+                                <?php else: ?>
+                                    <?php foreach ($auditData['logs'] as $log): ?>
+                                        <tr>
+                                            <td>
+                                                <small class="audit-timestamp">
+                                                    <?= date('M j, Y g:i A', strtotime($log->getTimestamp())) ?>
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-<?= 
+                                                    strpos($log->getAction(), 'login') !== false ? 'success' :
+                                                    (strpos($log->getAction(), 'created') !== false ? 'primary' :
+                                                    (strpos($log->getAction(), 'deleted') !== false ? 'danger' :
+                                                    (strpos($log->getAction(), 'updated') !== false ? 'warning' : 
+                                                    (strpos($log->getAction(), 'started') !== false ? 'success' :
+                                                    (strpos($log->getAction(), 'ended') !== false ? 'danger' : 'info')))))
+                                                ?>">
+                                                    <?= ucwords(str_replace('_', ' ', $log->getAction())) ?>
+                                                </span>
+                                            </td>
+                                            <td><?= htmlspecialchars($log->getUsername()) ?></td>
+                                            <td><?= htmlspecialchars($log->getDetails()) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
+                    
+                    <?php if ($auditData['totalPages'] > 1): ?>
+                        <nav aria-label="Audit log pagination">
+                            <ul class="pagination justify-content-center">
+                                <?php if ($auditData['currentPage'] > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="#" onclick="loadAuditPage(<?= $auditData['currentPage'] - 1 ?>)">
+                                            <i class="bi bi-chevron-left"></i> Previous
+                                        </a>
+                                    </li>
+                                <?php endif; ?>
+                                
+                                <?php
+                                $startPage = max(1, $auditData['currentPage'] - 2);
+                                $endPage = min($auditData['totalPages'], $auditData['currentPage'] + 2);
+                                ?>
+                                
+                                <?php for ($i = $startPage; $i <= $endPage; $i++): ?>
+                                    <li class="page-item <?= $i === $auditData['currentPage'] ? 'active' : '' ?>">
+                                        <a class="page-link" href="#" onclick="loadAuditPage(<?= $i ?>)"><?= $i ?></a>
+                                    </li>
+                                <?php endfor; ?>
+                                
+                                <?php if ($auditData['currentPage'] < $auditData['totalPages']): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="#" onclick="loadAuditPage(<?= $auditData['currentPage'] + 1 ?>)">
+                                            Next <i class="bi bi-chevron-right"></i>
+                                        </a>
+                                    </li>
+                                <?php endif; ?>
+                            </ul>
+                        </nav>
+                    <?php endif; ?>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -851,6 +1026,32 @@ $auditLogs = $votingSystem->getAuditLogs(50);
         document.getElementById('edit_is_restricted').addEventListener('change', function() {
             document.getElementById('edit_allowed_users_container').style.display = this.checked ? 'block' : 'none';
         });
+        
+        // Handle start poll modal
+        const startPollModal = document.getElementById('startPollModal');
+        if (startPollModal) {
+            startPollModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const pollId = button.getAttribute('data-poll-id');
+                const pollTitle = button.getAttribute('data-poll-title');
+                
+                document.getElementById('start_poll_id').value = pollId;
+                document.getElementById('startPollTitle').textContent = pollTitle;
+            });
+        }
+        
+        // Handle end poll modal
+        const endPollModal = document.getElementById('endPollModal');
+        if (endPollModal) {
+            endPollModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const pollId = button.getAttribute('data-poll-id');
+                const pollTitle = button.getAttribute('data-poll-title');
+                
+                document.getElementById('end_poll_id').value = pollId;
+                document.getElementById('endPollTitle').textContent = pollTitle;
+            });
+        }
         
         // Handle edit poll modal
         const editPollModal = document.getElementById('editPollModal');
@@ -905,6 +1106,11 @@ $auditLogs = $votingSystem->getAuditLogs(50);
                 document.getElementById('edit_password').value = '';
                 document.getElementById('edit_role').value = role;
             });
+        }
+        
+        // Load audit page function
+        function loadAuditPage(page) {
+            window.location.href = '?audit_page=' + page + '#auditLogModal';
         }
     </script>
 </body>
