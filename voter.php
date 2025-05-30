@@ -78,7 +78,7 @@ foreach ($polls as $poll) {
 </head>
 <body>
     <div class="container-fluid py-4">
-        <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
+        <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center p-4">
             <div>
                 <h1 class="display-5 fw-bold mb-2">
                     <i class="bi bi-person-check text-primary"></i>
@@ -99,7 +99,7 @@ foreach ($polls as $poll) {
         </header>
 
         <!-- Poll Filter Tabs -->
-        <div class="poll-filter-tabs">
+        <div class="poll-filter-tabs mb-4">
             <ul class="nav nav-tabs">
                 <li class="nav-item">
                     <a class="nav-link <?= $statusFilter === 'all' ? 'active' : '' ?>" href="?status=all">
@@ -150,25 +150,25 @@ foreach ($polls as $poll) {
                         <?php foreach ($filteredPolls as $index => $poll): ?>
                             <div class="col-lg-6 col-xl-4 mb-4">
                                 <div class="card h-100 poll-card" style="cursor: pointer;" 
-                                     data-bs-toggle="modal" 
-                                     data-bs-target="<?= $poll->canBeVotedOn() && ($poll->allowsMultipleVotes() || !$poll->hasUserVoted($_SESSION['user_id'])) ? '#votingModal' : '#pollDetailsModal' ?>"
-                                     data-poll-id="<?= $poll->getId() ?>"
-                                     data-poll-title="<?= htmlspecialchars($poll->getTitle()) ?>"
-                                     data-poll-description="<?= htmlspecialchars($poll->getDescription()) ?>"
-                                     data-poll-type="<?= $poll->getPollType() ?>"
-                                     data-poll-type-display="<?= htmlspecialchars($poll->getDisplayName()) ?>"
-                                     data-poll-status="<?= $poll->getStatus() ?>"
-                                     data-poll-can-vote="<?= $poll->canBeVotedOn() && ($poll->allowsMultipleVotes() || !$poll->hasUserVoted($_SESSION['user_id'])) ? '1' : '0' ?>"
-                                     data-poll-has-voted="<?= $poll->hasUserVoted($_SESSION['user_id']) ? '1' : '0' ?>"
-                                     data-poll-requires-vote="<?= $poll->requiresVote() ? '1' : '0' ?>"
-                                     data-poll-multiple-selections="<?= $poll->allowsMultipleSelections() ? '1' : '0' ?>"
-                                     data-poll-max-options="<?= $poll->getMaxSelectableOptions() ?>"
-                                     data-poll-options="<?= htmlspecialchars(json_encode(array_map(function($option) {
-                                         return ['id' => $option->getId(), 'text' => $option->getText(), 'votes' => $option->getVotes()];
-                                     }, $poll->getOptions()))) ?>"
-                                     data-poll-total-votes="<?= $poll->getTotalVotes() ?>"
-                                     data-poll-show-results="<?= $poll->shouldShowResultsToUser($_SESSION['user_id']) ? '1' : '0' ?>"
-                                     data-poll-end-date="<?= $poll->getEndDate() ? date('M j, Y g:i A', strtotime($poll->getEndDate())) : '' ?>">
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="<?= $poll->canBeVotedOn() && ($poll->allowsMultipleVotes() || !$poll->hasUserVoted($_SESSION['user_id'])) ? '#votingModal' : '#pollDetailsModal' ?>"
+                                    data-poll-id="<?= $poll->getId() ?>"
+                                    data-poll-title="<?= htmlspecialchars($poll->getTitle()) ?>"
+                                    data-poll-description="<?= htmlspecialchars($poll->getDescription()) ?>"
+                                    data-poll-type="<?= $poll->getPollType() ?>"
+                                    data-poll-type-display="<?= htmlspecialchars($poll->getDisplayName()) ?>"
+                                    data-poll-status="<?= $poll->getStatus() ?>"
+                                    data-poll-can-vote="<?= $poll->canBeVotedOn() && ($poll->allowsMultipleVotes() || !$poll->hasUserVoted($_SESSION['user_id'])) ? '1' : '0' ?>"
+                                    data-poll-has-voted="<?= $poll->hasUserVoted($_SESSION['user_id']) ? '1' : '0' ?>"
+                                    data-poll-requires-vote="<?= $poll->requiresVote() ? '1' : '0' ?>"
+                                    data-poll-multiple-selections="<?= $poll->allowsMultipleSelections() ? '1' : '0' ?>"
+                                    data-poll-max-options="<?= $poll->getMaxSelectableOptions() ?>"
+                                    data-poll-options="<?= htmlspecialchars(json_encode(array_map(function($option) {
+                                        return ['id' => $option->getId(), 'text' => $option->getText(), 'votes' => $option->getVotes()];
+                                    }, $poll->getOptions()))) ?>"
+                                    data-poll-total-votes="<?= $poll->getTotalVotes() ?>"
+                                    data-poll-show-results="<?= $poll->shouldShowResultsToUser($_SESSION['user_id']) ? '1' : '0' ?>"
+                                    data-poll-end-date="<?= $poll->getEndDate() ? date('M j, Y g:i A', strtotime($poll->getEndDate())) : '' ?>">
                                     
                                     <div class="card-header d-flex justify-content-between align-items-start">
                                         <div class="flex-grow-1">
@@ -212,7 +212,7 @@ foreach ($polls as $poll) {
                                         <?php elseif (!$poll->canBeVotedOn()): ?>
                                             <div class="d-flex align-items-center text-warning">
                                                 <i class="bi bi-pause-circle me-2"></i>
-                                                <small>Not yet active</small>
+                                                <small>Poll Closed</small>
                                             </div>
                                         <?php elseif (!$poll->allowsMultipleVotes() && $poll->hasUserVoted($_SESSION['user_id'])): ?>
                                             <div class="d-flex align-items-center text-success">
@@ -301,9 +301,6 @@ foreach ($polls as $poll) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="confirmation-icon">
-                        <i class="bi bi-exclamation-triangle"></i>
-                    </div>
                     <div id="confirmationContent">
                         <!-- Content will be populated by JavaScript -->
                     </div>

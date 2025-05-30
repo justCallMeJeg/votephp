@@ -170,7 +170,7 @@ $auditData = $votingSystem->getAuditLogs($currentPage, 15, $actionFilter, $userF
 </head>
 <body>
     <div class="container-fluid py-4">
-        <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
+        <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center p-4">
             <div>
                 <h1 class="display-5 fw-bold mb-2">
                     <i class="bi bi-speedometer2 text-primary"></i>
@@ -352,7 +352,7 @@ $auditData = $votingSystem->getAuditLogs($currentPage, 15, $actionFilter, $userF
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div class="btn-group" role="group">
+                                                    <div role="group">
                                                         <?php if ($poll->isDraft()): ?>
                                                             <button type="button" class="btn btn-sm btn-success" 
                                                                     data-bs-toggle="modal" 
@@ -443,7 +443,7 @@ $auditData = $votingSystem->getAuditLogs($currentPage, 15, $actionFilter, $userF
                                                 </td>
                                                 <td><small class="text-muted font-monospace"><?= $user['id'] ?></small></td>
                                                 <td>
-                                                    <div class="btn-group" role="group">
+                                                    <div role="group">
                                                         <button type="button" class="btn btn-sm btn-primary" 
                                                                 data-bs-toggle="modal" 
                                                                 data-bs-target="#editUserModal" 
@@ -781,7 +781,7 @@ $auditData = $votingSystem->getAuditLogs($currentPage, 15, $actionFilter, $userF
                         <div class="accordion" id="advancedSettingsAccordion">
                             <div class="accordion-item">
                                 <h2 class="accordion-header" id="headingAdvancedSettings">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvancedSettings" aria-expanded="false" aria-controls="collapseAdvancedSettings">
+                                    <button class="accordion-button collapsed gap-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdvancedSettings" aria-expanded="false" aria-controls="collapseAdvancedSettings">
                                         <i class="bi bi-gear"></i> Advanced Settings
                                     </button>
                                 </h2>
