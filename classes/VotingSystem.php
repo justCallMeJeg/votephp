@@ -252,14 +252,30 @@ class VotingSystem {
     }
     
     /**
-     * Get audit logs with pagination
+     * Get audit logs with pagination and filters
      */
-    public function getAuditLogs($page = 1, $perPage = 20) {
-        $totalLogs = count($this->auditLogs);
+    public function getAuditLogs($page = 1, $perPage = 20, $actionFilter = '', $userFilter = '') {
+        $filteredLogs = $this->auditLogs;
+        
+        // Apply action filter
+        if (!empty($actionFilter)) {
+            $filteredLogs = array_filter($filteredLogs, function($log) use ($actionFilter) {
+                return $log->getAction() === $actionFilter;
+            });
+        }
+        
+        // Apply user filter
+        if (!empty($userFilter)) {
+            $filteredLogs = array_filter($filteredLogs, function($log) use ($userFilter) {
+                return $log->getUsername() === $userFilter;
+            });
+        }
+        
+        $totalLogs = count($filteredLogs);
         $totalPages = ceil($totalLogs / $perPage);
         $offset = ($page - 1) * $perPage;
         
-        $reversedLogs = array_reverse($this->auditLogs);
+        $reversedLogs = array_reverse($filteredLogs);
         $paginatedLogs = array_slice($reversedLogs, $offset, $perPage);
         
         return [
