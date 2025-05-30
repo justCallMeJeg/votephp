@@ -1,1 +1,37 @@
-[]
+[
+    {
+        "id": "poll_68106e2a4e325",
+        "title": "Simple Poll",
+        "description": "",
+        "options": [
+            {
+                "id": "option_poll_68106e2a4e325_0",
+                "text": "option 1",
+                "votes": 0
+            },
+            {
+                "id": "option_poll_68106e2a4e325_1",
+                "text": "option 2",
+                "votes": 0
+            },
+            {
+                "id": "option_poll_68106e2a4e325_2",
+                "text": "option 3",
+                "votes": 0
+            },
+            {
+                "id": "option_poll_68106e2a4e325_3",
+                "text": "option 4",
+                "votes": 0
+            }
+        ],
+        "allow_multiple_votes": false,
+        "show_results_mode": "always",
+        "is_restricted": false,
+        "allowed_users": [],
+        "end_date": null,
+        "voted_users": [],
+        "max_selectable_options": 1,
+        "requires_vote": true
+    }
+]

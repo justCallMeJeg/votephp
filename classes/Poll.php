@@ -1,36 +1,24 @@
 <?php
 /**
- * Class to represent a poll
- * Demonstrates OOP principles: Encapsulation
+ * Abstract base class for polls
+ * Demonstrates OOP principles: Inheritance, Abstraction
  */
-class Poll {
-    private $id;
-    private $title;
-    private $description;
-    private $options;
-    private $allowMultipleVotes;
-    private $showResultsMode; // 'after_vote', 'after_close', 'always'
-    private $isRestricted;
-    private $allowedUsers;
-    private $endDate;
-    private $votedUsers;
-    private $maxSelectableOptions; // New property for multiple selections
-    private $requiresVote; // Whether voting is required or optional
+abstract class Poll {
+    protected $id;
+    protected $title;
+    protected $description;
+    protected $options;
+    protected $allowMultipleVotes;
+    protected $showResultsMode;
+    protected $isRestricted;
+    protected $allowedUsers;
+    protected $endDate;
+    protected $votedUsers;
+    protected $requiresVote;
+    protected $pollType;
     
     /**
      * Constructor
-     * 
-     * @param string $id Unique identifier
-     * @param string $title Poll title
-     * @param string $description Poll description
-     * @param array $options Array of Option objects
-     * @param bool $allowMultipleVotes Whether users can vote multiple times
-     * @param string $showResultsMode When to show results ('after_vote', 'after_close', 'always')
-     * @param bool $isRestricted Whether the poll is restricted to specific users
-     * @param array $allowedUsers Array of user IDs allowed to vote
-     * @param string $endDate End date of the poll (Y-m-d H:i:s format)
-     * @param array $votedUsers Array of user IDs who have voted
-     * @param int $maxSelectableOptions Maximum number of options a user can select (1 for single choice)
      */
     public function __construct(
         $id, 
@@ -43,8 +31,8 @@ class Poll {
         $allowedUsers = [], 
         $endDate = null,
         $votedUsers = [],
-        $maxSelectableOptions = 1,
-        $requiresVote = true
+        $requiresVote = true,
+        $pollType = 'basic'
     ) {
         $this->id = $id;
         $this->title = $title;
@@ -56,50 +44,26 @@ class Poll {
         $this->allowedUsers = $allowedUsers;
         $this->endDate = $endDate;
         $this->votedUsers = $votedUsers;
-        $this->maxSelectableOptions = max(1, intval($maxSelectableOptions)); // Ensure at least 1
         $this->requiresVote = $requiresVote;
+        $this->pollType = $pollType;
     }
     
-    /**
-     * Get poll ID
-     * 
-     * @return string Poll ID
-     */
-    public function getId() {
-        return $this->id;
-    }
-    
-    /**
-     * Get poll title
-     * 
-     * @return string Poll title
-     */
-    public function getTitle() {
-        return $this->title;
-    }
-    
-    /**
-     * Get poll description
-     * 
-     * @return string Poll description
-     */
-    public function getDescription() {
-        return $this->description;
-    }
-    
-    /**
-     * Get poll options
-     * 
-     * @return array Array of Option objects
-     */
-    public function getOptions() {
-        return $this->options;
-    }
+    // Getters
+    public function getId() { return $this->id; }
+    public function getTitle() { return $this->title; }
+    public function getDescription() { return $this->description; }
+    public function getOptions() { return $this->options; }
+    public function allowsMultipleVotes() { return $this->allowMultipleVotes; }
+    public function getShowResultsMode() { return $this->showResultsMode; }
+    public function isRestricted() { return $this->isRestricted; }
+    public function getAllowedUsers() { return $this->allowedUsers; }
+    public function getEndDate() { return $this->endDate; }
+    public function getVotedUsers() { return $this->votedUsers; }
+    public function requiresVote() { return $this->requiresVote; }
+    public function getPollType() { return $this->pollType; }
     
     /**
      * Get total votes for this poll
-     * 
-     * @return int Total votes
      */
     public function getTotalVotes() {
         $total = 0;
@@ -110,82 +74,27 @@ class Poll {
     }
     
     /**
-     * Check if multiple votes are allowed
-     * 
-     * @return bool True if multiple votes are allowed
-     */
-    public function allowsMultipleVotes() {
-        return $this->allowMultipleVotes;
-    }
-    
-    /**
-     * Get when to show results
-     * 
-     * @return string When to show results
-     */
-    public function getShowResultsMode() {
-        return $this->showResultsMode;
-    }
-    
-    /**
-     * Check if poll is restricted to specific users
-     * 
-     * @return bool True if poll is restricted
-     */
-    public function isRestricted() {
-        return $this->isRestricted;
-    }
-    
-    /**
-     * Get allowed users
-     * 
-     * @return array Array of user IDs
-     */
-    public function getAllowedUsers() {
-        return $this->allowedUsers;
-    }
-    
-    /**
-     * Get end date
-     * 
-     * @return string End date
-     */
-    public function getEndDate() {
-        return $this->endDate;
-    }
-    
-    /**
      * Check if poll is closed
-     * 
-     * @return bool True if poll is closed
      */
     public function isClosed() {
         if ($this->endDate === null) {
             return false;
         }
-        
         return strtotime($this->endDate) < time();
     }
     
     /**
      * Check if user is allowed to vote
-     * 
-     * @param string $userId User ID
-     * @return bool True if user is allowed to vote
      */
     public function isUserAllowed($userId) {
         if (!$this->isRestricted) {
             return true;
         }
-        
         return in_array($userId, $this->allowedUsers);
     }
     
     /**
      * Check if user has already voted
-     * 
-     * @param string $userId User ID
-     * @return bool True if user has already voted
      */
     public function hasUserVoted($userId) {
         return in_array($userId, $this->votedUsers);
@@ -193,8 +102,6 @@ class Poll {
     
     /**
      * Add user to voted users
-     * 
-     * @param string $userId User ID
      */
     public function addVotedUser($userId) {
         if (!in_array($userId, $this->votedUsers)) {
@@ -204,9 +111,6 @@ class Poll {
     
     /**
      * Check if results should be shown to user
-     * 
-     * @param string $userId User ID
-     * @return bool True if results should be shown
      */
     public function shouldShowResultsToUser($userId) {
         switch ($this->showResultsMode) {
@@ -221,37 +125,7 @@ class Poll {
     }
     
     /**
-     * Get voted users
-     * 
-     * @return array Array of user IDs
-     */
-    public function getVotedUsers() {
-        return $this->votedUsers;
-    }
-    
-    /**
-     * Get maximum number of options a user can select
-     * 
-     * @return int Maximum number of selectable options
-     */
-    public function getMaxSelectableOptions() {
-        return $this->maxSelectableOptions;
-    }
-    
-    /**
-     * Check if poll allows multiple selections
-     * 
-     * @return bool True if multiple selections are allowed
-     */
-    public function allowsMultipleSelections() {
-        return $this->maxSelectableOptions > 1;
-    }
-    
-    /**
      * Get option by ID
-     * 
-     * @param string $optionId Option ID
-     * @return Option|null Option object if found, null otherwise
      */
     public function getOptionById($optionId) {
         foreach ($this->options as $option) {
@@ -262,12 +136,126 @@ class Poll {
         return null;
     }
     
-    /**
-     * Check if poll requires voting
-     * 
-     * @return bool True if voting is required
-     */
-    public function requiresVote() {
-        return $this->requiresVote;
+    // Abstract methods that must be implemented by subclasses
+    abstract public function getMaxSelectableOptions();
+    abstract public function allowsMultipleSelections();
+    abstract public function validateVote($optionIds);
+    abstract public function getDisplayName();
+}
+
+/**
+ * Single choice poll - users can select only one option
+ */
+class SingleChoicePoll extends Poll {
+    public function __construct(
+        $id, $title, $description, $options, $allowMultipleVotes = true, 
+        $showResultsMode = 'always', $isRestricted = false, $allowedUsers = [], 
+        $endDate = null, $votedUsers = [], $requiresVote = true
+    ) {
+        parent::__construct(
+            $id, $title, $description, $options, $allowMultipleVotes, 
+            $showResultsMode, $isRestricted, $allowedUsers, $endDate, 
+            $votedUsers, $requiresVote, 'single_choice'
+        );
+    }
+    
+    public function getMaxSelectableOptions() {
+        return 1;
+    }
+    
+    public function allowsMultipleSelections() {
+        return false;
+    }
+    
+    public function validateVote($optionIds) {
+        if (!is_array($optionIds)) {
+            $optionIds = [$optionIds];
+        }
+        return count($optionIds) === 1;
+    }
+    
+    public function getDisplayName() {
+        return 'Single Choice Poll';
+    }
+}
+
+/**
+ * Multiple choice poll - users can select multiple options
+ */
+class MultipleChoicePoll extends Poll {
+    private $maxSelectableOptions;
+    
+    public function __construct(
+        $id, $title, $description, $options, $maxSelectableOptions = 2,
+        $allowMultipleVotes = true, $showResultsMode = 'always', 
+        $isRestricted = false, $allowedUsers = [], $endDate = null, 
+        $votedUsers = [], $requiresVote = true
+    ) {
+        parent::__construct(
+            $id, $title, $description, $options, $allowMultipleVotes, 
+            $showResultsMode, $isRestricted, $allowedUsers, $endDate, 
+            $votedUsers, $requiresVote, 'multiple_choice'
+        );
+        $this->maxSelectableOptions = max(2, min(count($options), intval($maxSelectableOptions)));
+    }
+    
+    public function getMaxSelectableOptions() {
+        return $this->maxSelectableOptions;
+    }
+    
+    public function allowsMultipleSelections() {
+        return true;
+    }
+    
+    public function validateVote($optionIds) {
+        if (!is_array($optionIds)) {
+            $optionIds = [$optionIds];
+        }
+        return count($optionIds) >= 1 && count($optionIds) <= $this->maxSelectableOptions;
+    }
+    
+    public function getDisplayName() {
+        return 'Multiple Choice Poll (up to ' . $this->maxSelectableOptions . ' selections)';
+    }
+}
+
+/**
+ * Yes/No poll - simple binary choice
+ */
+class YesNoPoll extends Poll {
+    public function __construct(
+        $id, $title, $description, $allowMultipleVotes = true, 
+        $showResultsMode = 'always', $isRestricted = false, $allowedUsers = [], 
+        $endDate = null, $votedUsers = [], $requiresVote = true
+    ) {
+        $options = [
+            new Option('yes_' . $id, 'Yes', 0),
+            new Option('no_' . $id, 'No', 0)
+        ];
+        
+        parent::__construct(
+            $id, $title, $description, $options, $allowMultipleVotes, 
+            $showResultsMode, $isRestricted, $allowedUsers, $endDate, 
+            $votedUsers, $requiresVote, 'yes_no'
+        );
+    }
+    
+    public function getMaxSelectableOptions() {
+        return 1;
+    }
+    
+    public function allowsMultipleSelections() {
+        return false;
+    }
+    
+    public function validateVote($optionIds) {
+        if (!is_array($optionIds)) {
+            $optionIds = [$optionIds];
+        }
+        return count($optionIds) === 1;
+    }
+    
+    public function getDisplayName() {
+        return 'Yes/No Poll';
     }
 }

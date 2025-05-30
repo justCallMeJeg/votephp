@@ -1,1 +1,14 @@
-[]
+[
+    {
+        "id": "user_68106e051d0ea",
+        "username": "admin",
+        "password_hash": "$2y$10$3uZdPxV0RkT0Gbh62yrfb.tePjmmrpfbvFTILtEcrLZr3Ia2C.BVC",
+        "role": "admin"
+    },
+    {
+        "id": "user_68106e053a21a",
+        "username": "voter",
+        "password_hash": "$2y$10$Fko5mLuXAaXmuLsStRHrAeaiqQn7PRnsrP0a\/NhlT43tyhZ3YXgcm",
+        "role": "voter"
+    }
+]

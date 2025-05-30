@@ -1,32 +1,64 @@
 <?php
 require_once 'Poll.php';
 require_once 'Option.php';
-require_once 'FileHandler.php';
 require_once 'User.php';
+require_once 'AuditLog.php';
 
 /**
- * Main class for the voting system
+ * Main class for the voting system with integrated file handling
  * Demonstrates OOP principles: Encapsulation, Abstraction
  */
 class VotingSystem {
-    private $fileHandler;
-    private $userFileHandler;
     private $polls = [];
     private $users = [];
+    private $auditLogs = [];
+    private $dataDir = 'data/';
     
     /**
-     * Constructor initializes the file handlers and loads data
+     * Constructor initializes the system and loads data
      */
     public function __construct() {
-        $this->fileHandler = new FileHandler('data/polls.json');
-        $this->userFileHandler = new FileHandler('data/users.json');
+        $this->ensureDataDirectory();
         $this->loadPolls();
         $this->loadUsers();
+        $this->loadAuditLogs();
         
         // Create default users if none exist
         if (empty($this->users)) {
             $this->createDefaultUsers();
         }
+    }
+    
+    /**
+     * Ensure data directory exists
+     */
+    private function ensureDataDirectory() {
+        if (!is_dir($this->dataDir)) {
+            mkdir($this->dataDir, 0755, true);
+        }
+    }
+    
+    /**
+     * Read data from JSON file
+     */
+    private function readJsonFile($filename) {
+        $filepath = $this->dataDir . $filename;
+        if (!file_exists($filepath)) {
+            file_put_contents($filepath, json_encode([]));
+            return [];
+        }
+        
+        $content = file_get_contents($filepath);
+        return json_decode($content, true) ?: [];
+    }
+    
+    /**
+     * Write data to JSON file
+     */
+    private function writeJsonFile($filename, $data) {
+        $filepath = $this->dataDir . $filename;
+        $content = json_encode($data, JSON_PRETTY_PRINT);
+        return file_put_contents($filepath, $content) !== false;
     }
     
     /**
@@ -38,10 +70,10 @@ class VotingSystem {
     }
     
     /**
-     * Load polls from the JSON file
+     * Load polls from JSON file
      */
     private function loadPolls() {
-        $data = $this->fileHandler->readData();
+        $data = $this->readJsonFile('polls.json');
         
         if (!empty($data)) {
             foreach ($data as $pollData) {
@@ -54,37 +86,88 @@ class VotingSystem {
                     );
                 }
                 
-                $this->polls[] = new Poll(
-                    $pollData['id'],
-                    $pollData['title'],
-                    $pollData['description'],
-                    $options,
-                    $pollData['allow_multiple_votes'] ?? true,
-                    $pollData['show_results_mode'] ?? 'always',
-                    $pollData['is_restricted'] ?? false,
-                    $pollData['allowed_users'] ?? [],
-                    $pollData['end_date'] ?? null,
-                    $pollData['voted_users'] ?? [],
-                    $pollData['max_selectable_options'] ?? 1,
-                    $pollData['requires_vote'] ?? true
-                );
+                // Create appropriate poll type based on stored type
+                $pollType = $pollData['poll_type'] ?? 'single_choice';
+                
+                switch ($pollType) {
+                    case 'multiple_choice':
+                        $poll = new MultipleChoicePoll(
+                            $pollData['id'],
+                            $pollData['title'],
+                            $pollData['description'],
+                            $options,
+                            $pollData['max_selectable_options'] ?? 2,
+                            $pollData['allow_multiple_votes'] ?? true,
+                            $pollData['show_results_mode'] ?? 'always',
+                            $pollData['is_restricted'] ?? false,
+                            $pollData['allowed_users'] ?? [],
+                            $pollData['end_date'] ?? null,
+                            $pollData['voted_users'] ?? [],
+                            $pollData['requires_vote'] ?? true
+                        );
+                        break;
+                    case 'yes_no':
+                        $poll = new YesNoPoll(
+                            $pollData['id'],
+                            $pollData['title'],
+                            $pollData['description'],
+                            $pollData['allow_multiple_votes'] ?? true,
+                            $pollData['show_results_mode'] ?? 'always',
+                            $pollData['is_restricted'] ?? false,
+                            $pollData['allowed_users'] ?? [],
+                            $pollData['end_date'] ?? null,
+                            $pollData['voted_users'] ?? [],
+                            $pollData['requires_vote'] ?? true
+                        );
+                        break;
+                    default: // single_choice
+                        $poll = new SingleChoicePoll(
+                            $pollData['id'],
+                            $pollData['title'],
+                            $pollData['description'],
+                            $options,
+                            $pollData['allow_multiple_votes'] ?? true,
+                            $pollData['show_results_mode'] ?? 'always',
+                            $pollData['is_restricted'] ?? false,
+                            $pollData['allowed_users'] ?? [],
+                            $pollData['end_date'] ?? null,
+                            $pollData['voted_users'] ?? [],
+                            $pollData['requires_vote'] ?? true
+                        );
+                        break;
+                }
+                
+                $this->polls[] = $poll;
             }
         }
     }
     
     /**
-     * Load users from the JSON file
+     * Load users from JSON file
      */
     private function loadUsers() {
-        $data = $this->userFileHandler->readData();
+        $this->users = $this->readJsonFile('users.json');
+    }
+    
+    /**
+     * Load audit logs from JSON file
+     */
+    private function loadAuditLogs() {
+        $data = $this->readJsonFile('audit.json');
         
-        if (!empty($data)) {
-            $this->users = $data;
+        foreach ($data as $logData) {
+            $this->auditLogs[] = new AuditLog(
+                $logData['action'],
+                $logData['user_id'],
+                $logData['username'],
+                $logData['details'],
+                $logData['ip_address']
+            );
         }
     }
     
     /**
-     * Save polls to the JSON file
+     * Save polls to JSON file
      */
     private function savePolls() {
         $data = [];
@@ -99,7 +182,7 @@ class VotingSystem {
                 ];
             }
             
-            $data[] = [
+            $pollData = [
                 'id' => $poll->getId(),
                 'title' => $poll->getTitle(),
                 'description' => $poll->getDescription(),
@@ -110,25 +193,57 @@ class VotingSystem {
                 'allowed_users' => $poll->getAllowedUsers(),
                 'end_date' => $poll->getEndDate(),
                 'voted_users' => $poll->getVotedUsers(),
-                'max_selectable_options' => $poll->getMaxSelectableOptions(),
-                'requires_vote' => $poll->requiresVote()
+                'requires_vote' => $poll->requiresVote(),
+                'poll_type' => $poll->getPollType()
             ];
+            
+            // Add max_selectable_options for multiple choice polls
+            if ($poll instanceof MultipleChoicePoll) {
+                $pollData['max_selectable_options'] = $poll->getMaxSelectableOptions();
+            }
+            
+            $data[] = $pollData;
         }
         
-        $this->fileHandler->writeData($data);
+        $this->writeJsonFile('polls.json', $data);
     }
     
     /**
-     * Save users to the JSON file
+     * Save users to JSON file
      */
     private function saveUsers() {
-        $this->userFileHandler->writeData($this->users);
+        $this->writeJsonFile('users.json', $this->users);
+    }
+    
+    /**
+     * Save audit logs to JSON file
+     */
+    private function saveAuditLogs() {
+        $data = [];
+        foreach ($this->auditLogs as $log) {
+            $data[] = $log->toArray();
+        }
+        $this->writeJsonFile('audit.json', $data);
+    }
+    
+    /**
+     * Add audit log entry
+     */
+    public function addAuditLog($action, $userId, $username, $details = '') {
+        $log = new AuditLog($action, $userId, $username, $details);
+        $this->auditLogs[] = $log;
+        $this->saveAuditLogs();
+    }
+    
+    /**
+     * Get audit logs
+     */
+    public function getAuditLogs($limit = 100) {
+        return array_slice(array_reverse($this->auditLogs), 0, $limit);
     }
     
     /**
      * Get all polls
-     * 
-     * @return array Array of Poll objects
      */
     public function getPolls() {
         return $this->polls;
@@ -136,9 +251,6 @@ class VotingSystem {
     
     /**
      * Get polls accessible to a specific user
-     * 
-     * @param string $userId User ID
-     * @return array Array of Poll objects
      */
     public function getPollsForUser($userId) {
         $accessiblePolls = [];
@@ -154,8 +266,6 @@ class VotingSystem {
     
     /**
      * Get all users
-     * 
-     * @return array Array of user data
      */
     public function getUsers() {
         return $this->users;
@@ -163,122 +273,120 @@ class VotingSystem {
     
     /**
      * Create a new poll
-     * 
-     * @param string $title Poll title
-     * @param string $description Poll description
-     * @param array $optionsText Array of option texts
-     * @param bool $allowMultipleVotes Whether users can vote multiple times
-     * @param string $showResultsMode When to show results
-     * @param bool $isRestricted Whether the poll is restricted to specific users
-     * @param array $allowedUsers Array of user IDs allowed to vote
-     * @param string $endDate End date of the poll
-     * @param int $maxSelectableOptions Maximum number of options a user can select
-     * @return Poll The newly created poll
      */
     public function createPoll(
-        $title, 
-        $description, 
-        $optionsText, 
-        $allowMultipleVotes = true, 
-        $showResultsMode = 'always', 
-        $isRestricted = false, 
-        $allowedUsers = [], 
-        $endDate = null,
-        $maxSelectableOptions = 1,
-        $requiresVote = true
+        $title, $description, $pollType, $optionsText = [], 
+        $maxSelectableOptions = 1, $allowMultipleVotes = true, 
+        $showResultsMode = 'always', $isRestricted = false, 
+        $allowedUsers = [], $endDate = null, $requiresVote = true,
+        $userId = null, $username = null
     ) {
-        // Generate a unique ID for the poll
         $pollId = uniqid('poll_');
         
-        // Create options
-        $options = [];
-        foreach ($optionsText as $index => $text) {
-            $optionId = 'option_' . $pollId . '_' . $index;
-            $options[] = new Option($optionId, $text, 0);
+        switch ($pollType) {
+            case 'multiple_choice':
+                $options = [];
+                foreach ($optionsText as $index => $text) {
+                    $optionId = 'option_' . $pollId . '_' . $index;
+                    $options[] = new Option($optionId, $text, 0);
+                }
+                $poll = new MultipleChoicePoll(
+                    $pollId, $title, $description, $options, $maxSelectableOptions,
+                    $allowMultipleVotes, $showResultsMode, $isRestricted, 
+                    $allowedUsers, $endDate, [], $requiresVote
+                );
+                break;
+                
+            case 'yes_no':
+                $poll = new YesNoPoll(
+                    $pollId, $title, $description, $allowMultipleVotes, 
+                    $showResultsMode, $isRestricted, $allowedUsers, 
+                    $endDate, [], $requiresVote
+                );
+                break;
+                
+            default: // single_choice
+                $options = [];
+                foreach ($optionsText as $index => $text) {
+                    $optionId = 'option_' . $pollId . '_' . $index;
+                    $options[] = new Option($optionId, $text, 0);
+                }
+                $poll = new SingleChoicePoll(
+                    $pollId, $title, $description, $options, $allowMultipleVotes, 
+                    $showResultsMode, $isRestricted, $allowedUsers, 
+                    $endDate, [], $requiresVote
+                );
+                break;
         }
         
-        // Ensure maxSelectableOptions is valid
-        $maxSelectableOptions = max(1, min(count($options), intval($maxSelectableOptions)));
-        
-        // Create the poll
-        $poll = new Poll(
-            $pollId, 
-            $title, 
-            $description, 
-            $options, 
-            $allowMultipleVotes, 
-            $showResultsMode, 
-            $isRestricted, 
-            $allowedUsers, 
-            $endDate,
-            [],
-            $maxSelectableOptions,
-            $requiresVote
-        );
-        
-        // Add to polls array
         $this->polls[] = $poll;
-        
-        // Save to file
         $this->savePolls();
+        
+        // Add audit log
+        if ($userId && $username) {
+            $this->addAuditLog(
+                'poll_created', 
+                $userId, 
+                $username, 
+                "Created poll: {$title} (Type: {$poll->getDisplayName()})"
+            );
+        }
         
         return $poll;
     }
     
     /**
      * Update an existing poll
-     * 
-     * @param string $pollId ID of the poll to update
-     * @param string $title New poll title
-     * @param string $description New poll description
-     * @param bool $allowMultipleVotes Whether users can vote multiple times
-     * @param string $showResultsMode When to show results
-     * @param bool $isRestricted Whether the poll is restricted to specific users
-     * @param array $allowedUsers Array of user IDs allowed to vote
-     * @param string $endDate End date of the poll
-     * @param int $maxSelectableOptions Maximum number of options a user can select
-     * @return bool True if successful, false otherwise
      */
     public function updatePoll(
-        $pollId,
-        $title, 
-        $description, 
-        $allowMultipleVotes = true, 
-        $showResultsMode = 'always', 
-        $isRestricted = false, 
-        $allowedUsers = [], 
-        $endDate = null,
-        $maxSelectableOptions = 1,
-        $requiresVote = true
+        $pollId, $title, $description, $allowMultipleVotes = true, 
+        $showResultsMode = 'always', $isRestricted = false, 
+        $allowedUsers = [], $endDate = null, $maxSelectableOptions = 1,
+        $requiresVote = true, $userId = null, $username = null
     ) {
         foreach ($this->polls as $key => $poll) {
             if ($poll->getId() === $pollId) {
                 $options = $poll->getOptions();
+                $pollType = $poll->getPollType();
                 
-                // Ensure maxSelectableOptions is valid
-                $maxSelectableOptions = max(1, min(count($options), intval($maxSelectableOptions)));
+                // Create updated poll of the same type
+                switch ($pollType) {
+                    case 'multiple_choice':
+                        $maxSelectableOptions = max(2, min(count($options), intval($maxSelectableOptions)));
+                        $updatedPoll = new MultipleChoicePoll(
+                            $pollId, $title, $description, $options, $maxSelectableOptions,
+                            $allowMultipleVotes, $showResultsMode, $isRestricted,
+                            $allowedUsers, $endDate, $poll->getVotedUsers(), $requiresVote
+                        );
+                        break;
+                    case 'yes_no':
+                        $updatedPoll = new YesNoPoll(
+                            $pollId, $title, $description, $allowMultipleVotes,
+                            $showResultsMode, $isRestricted, $allowedUsers,
+                            $endDate, $poll->getVotedUsers(), $requiresVote
+                        );
+                        break;
+                    default: // single_choice
+                        $updatedPoll = new SingleChoicePoll(
+                            $pollId, $title, $description, $options, $allowMultipleVotes,
+                            $showResultsMode, $isRestricted, $allowedUsers,
+                            $endDate, $poll->getVotedUsers(), $requiresVote
+                        );
+                        break;
+                }
                 
-                // Create a new poll object with updated values but keep the original options and votes
-                $updatedPoll = new Poll(
-                    $pollId,
-                    $title,
-                    $description,
-                    $options,
-                    $allowMultipleVotes,
-                    $showResultsMode,
-                    $isRestricted,
-                    $allowedUsers,
-                    $endDate,
-                    $poll->getVotedUsers(),
-                    $maxSelectableOptions,
-                    $requiresVote
-                );
-                
-                // Replace the old poll with the updated one
                 $this->polls[$key] = $updatedPoll;
-                
-                // Save to file
                 $this->savePolls();
+                
+                // Add audit log
+                if ($userId && $username) {
+                    $this->addAuditLog(
+                        'poll_updated', 
+                        $userId, 
+                        $username, 
+                        "Updated poll: {$title}"
+                    );
+                }
                 
                 return true;
             }
@@ -289,15 +397,24 @@ class VotingSystem {
     
     /**
      * Delete a poll
-     * 
-     * @param string $pollId ID of the poll to delete
-     * @return bool True if successful, false otherwise
      */
-    public function deletePoll($pollId) {
+    public function deletePoll($pollId, $userId = null, $username = null) {
         foreach ($this->polls as $key => $poll) {
             if ($poll->getId() === $pollId) {
+                $pollTitle = $poll->getTitle();
                 array_splice($this->polls, $key, 1);
                 $this->savePolls();
+                
+                // Add audit log
+                if ($userId && $username) {
+                    $this->addAuditLog(
+                        'poll_deleted', 
+                        $userId, 
+                        $username, 
+                        "Deleted poll: {$pollTitle}"
+                    );
+                }
+                
                 return true;
             }
         }
@@ -307,11 +424,6 @@ class VotingSystem {
     
     /**
      * Vote for option(s) in a poll
-     * 
-     * @param string $pollId ID of the poll
-     * @param string|array $optionIds ID(s) of the option(s)
-     * @param string $userId ID of the user voting
-     * @return bool True if vote was successful, false otherwise
      */
     public function vote($pollId, $optionIds, $userId) {
         foreach ($this->polls as $poll) {
@@ -331,21 +443,23 @@ class VotingSystem {
                     return false;
                 }
                 
+                // Validate vote using poll-specific validation
+                if (!$poll->validateVote($optionIds)) {
+                    return false;
+                }
+                
                 // Convert single option ID to array for consistent handling
                 if (!is_array($optionIds)) {
                     $optionIds = [$optionIds];
                 }
                 
-                // Check if number of selected options is valid
-                if (count($optionIds) > $poll->getMaxSelectableOptions()) {
-                    return false;
-                }
-                
                 // Increment votes for each selected option
+                $selectedOptions = [];
                 foreach ($optionIds as $optionId) {
                     $option = $poll->getOptionById($optionId);
                     if ($option) {
                         $option->incrementVotes();
+                        $selectedOptions[] = $option->getText();
                     }
                 }
                 
@@ -354,6 +468,17 @@ class VotingSystem {
                 
                 // Save to file
                 $this->savePolls();
+                
+                // Add audit log
+                $user = $this->getUserById($userId);
+                if ($user) {
+                    $this->addAuditLog(
+                        'vote_cast', 
+                        $userId, 
+                        $user['username'], 
+                        "Voted on poll: {$poll->getTitle()} - Selected: " . implode(', ', $selectedOptions)
+                    );
+                }
                 
                 return true;
             }
@@ -364,13 +489,8 @@ class VotingSystem {
     
     /**
      * Create a new user
-     * 
-     * @param string $username Username
-     * @param string $password Plain text password
-     * @param string $role User role (admin or voter)
-     * @return bool True if successful, false if username already exists
      */
-    public function createUser($username, $password, $role) {
+    public function createUser($username, $password, $role, $createdByUserId = null, $createdByUsername = null) {
         // Check if username already exists
         foreach ($this->users as $user) {
             if ($user['username'] === $username) {
@@ -378,13 +498,9 @@ class VotingSystem {
             }
         }
         
-        // Generate a unique ID for the user
         $userId = uniqid('user_');
-        
-        // Hash the password
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
         
-        // Create user data
         $userData = [
             'id' => $userId,
             'username' => $username,
@@ -392,26 +508,26 @@ class VotingSystem {
             'role' => $role
         ];
         
-        // Add to users array
         $this->users[] = $userData;
-        
-        // Save to file
         $this->saveUsers();
+        
+        // Add audit log
+        if ($createdByUserId && $createdByUsername) {
+            $this->addAuditLog(
+                'user_created', 
+                $createdByUserId, 
+                $createdByUsername, 
+                "Created user: {$username} (Role: {$role})"
+            );
+        }
         
         return true;
     }
     
     /**
      * Update an existing user
-     * 
-     * @param string $userId ID of the user to update
-     * @param string $username New username
-     * @param string $password New password (if empty, keep the old password)
-     * @param string $role New user role
-     * @return bool True if successful, false if username already exists or user not found
      */
-    public function updateUser($userId, $username, $password, $role) {
-        // Find the user to update
+    public function updateUser($userId, $username, $password, $role, $updatedByUserId = null, $updatedByUsername = null) {
         $userIndex = -1;
         foreach ($this->users as $index => $user) {
             if ($user['id'] === $userId) {
@@ -420,7 +536,6 @@ class VotingSystem {
             }
         }
         
-        // If user not found, return false
         if ($userIndex === -1) {
             return false;
         }
@@ -432,6 +547,8 @@ class VotingSystem {
             }
         }
         
+        $oldUsername = $this->users[$userIndex]['username'];
+        
         // Update user data
         $this->users[$userIndex]['username'] = $username;
         $this->users[$userIndex]['role'] = $role;
@@ -441,37 +558,47 @@ class VotingSystem {
             $this->users[$userIndex]['password_hash'] = password_hash($password, PASSWORD_DEFAULT);
         }
         
-        // Save to file
         $this->saveUsers();
+        
+        // Add audit log
+        if ($updatedByUserId && $updatedByUsername) {
+            $changes = [];
+            if ($oldUsername !== $username) $changes[] = "username: {$oldUsername} → {$username}";
+            if (!empty($password)) $changes[] = "password changed";
+            $changes[] = "role: {$role}";
+            
+            $this->addAuditLog(
+                'user_updated', 
+                $updatedByUserId, 
+                $updatedByUsername, 
+                "Updated user: " . implode(', ', $changes)
+            );
+        }
         
         return true;
     }
     
     /**
      * Delete a user
-     * 
-     * @param string $userId ID of the user to delete
-     * @return bool True if successful, false otherwise
      */
-    public function deleteUser($userId) {
-        // Find the user to delete
+    public function deleteUser($userId, $deletedByUserId = null, $deletedByUsername = null) {
         $userIndex = -1;
+        $deletedUsername = '';
+        
         foreach ($this->users as $index => $user) {
             if ($user['id'] === $userId) {
                 $userIndex = $index;
+                $deletedUsername = $user['username'];
                 break;
             }
         }
         
-        // If user not found, return false
         if ($userIndex === -1) {
             return false;
         }
         
         // Remove user from users array
         array_splice($this->users, $userIndex, 1);
-        
-        // Save to file
         $this->saveUsers();
         
         // Remove user from allowed users in restricted polls
@@ -499,34 +626,52 @@ class VotingSystem {
             }
         }
         
+        // Add audit log
+        if ($deletedByUserId && $deletedByUsername) {
+            $this->addAuditLog(
+                'user_deleted', 
+                $deletedByUserId, 
+                $deletedByUsername, 
+                "Deleted user: {$deletedUsername}"
+            );
+        }
+        
         return true;
     }
     
     /**
      * Authenticate a user
-     * 
-     * @param string $username Username
-     * @param string $password Plain text password
-     * @return array|false User data if authenticated, false otherwise
      */
     public function authenticateUser($username, $password) {
         foreach ($this->users as $user) {
             if ($user['username'] === $username) {
                 if (password_verify($password, $user['password_hash'])) {
+                    // Add audit log for successful login
+                    $this->addAuditLog(
+                        'user_login', 
+                        $user['id'], 
+                        $username, 
+                        "Successful login"
+                    );
                     return $user;
                 }
                 break;
             }
         }
         
+        // Add audit log for failed login
+        $this->addAuditLog(
+            'login_failed', 
+            'unknown', 
+            $username, 
+            "Failed login attempt"
+        );
+        
         return false;
     }
     
     /**
      * Get a poll by ID
-     * 
-     * @param string $pollId Poll ID
-     * @return Poll|null Poll object if found, null otherwise
      */
     public function getPollById($pollId) {
         foreach ($this->polls as $poll) {
@@ -534,15 +679,11 @@ class VotingSystem {
                 return $poll;
             }
         }
-        
         return null;
     }
     
     /**
      * Get a user by ID
-     * 
-     * @param string $userId User ID
-     * @return array|null User data if found, null otherwise
      */
     public function getUserById($userId) {
         foreach ($this->users as $user) {
@@ -550,7 +691,6 @@ class VotingSystem {
                 return $user;
             }
         }
-        
         return null;
     }
 }
